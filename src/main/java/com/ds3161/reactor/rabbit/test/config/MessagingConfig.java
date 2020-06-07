@@ -3,6 +3,7 @@ package com.ds3161.reactor.rabbit.test.config;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.Delivery;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import reactor.core.publisher.Flux;
@@ -26,8 +27,8 @@ public class MessagingConfig {
 	}
 
 	@Bean
-	Flux<Delivery> deliveryFlux(Receiver receiver) {
-		return receiver.consumeNoAck(QUEUE);
+	Flux<Delivery> deliveryFlux(Receiver receiver, @Value("${spring.application.name}") String consumerName) {
+		return receiver.consumeNoAck(QUEUE, new ConsumeOptions().consumerTag(consumerName));
 	}
 
 }
