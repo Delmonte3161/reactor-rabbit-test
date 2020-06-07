@@ -1,3 +1,2 @@
-# rabbit-test
-org.springframework.integration.handler.DelayHandler shows where delivery attempts is incremented
 # reactor-rabbit-test
+A sample app/poc for reactor rabbit within spring boot
