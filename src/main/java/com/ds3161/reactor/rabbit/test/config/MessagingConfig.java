@@ -28,7 +28,8 @@ public class MessagingConfig {
 
 	@Bean
 	Flux<Delivery> deliveryFlux(Receiver receiver, @Value("${spring.application.name}") String consumerName) {
-		return receiver.consumeNoAck(QUEUE, new ConsumeOptions().consumerTag(consumerName));
+		// TODO handle manual ack when processed
+		return receiver.consumeAutoAck(QUEUE, new ConsumeOptions().consumerTag(consumerName));
 	}
 
 }

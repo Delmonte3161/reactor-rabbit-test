@@ -1,5 +1,7 @@
 package com.ds3161.reactor.rabbit.test;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.Delivery;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,10 @@ import reactor.rabbitmq.OutboundMessage;
 import reactor.rabbitmq.Sender;
 
 import javax.annotation.PreDestroy;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,32 +37,63 @@ public class Runner implements CommandLineRunner {
 
 	private final AtomicBoolean latchCompleted = new AtomicBoolean(false);
 
+	private final static ObjectMapper MAPPER = new ObjectMapper();
+
 	@Override
 	public void run(String... args) throws Exception {
-		int messageCount = 10;
-		CountDownLatch latch = new CountDownLatch(messageCount);
-
 		// A sample receiver
-		// TODO get at the headers?
-		deliveryFlux.doOnNext(m -> {
-			log.info("Received message {}", new String(m.getBody()));
-			latch.countDown();
-		}).subscribe();
+		deliveryFlux //
+				.doOnNext(delivery -> log.info("Delivery envelope:{} properties:{} headers:{}", delivery.getEnvelope(),
+						delivery.getProperties(), delivery.getProperties().getHeaders()))
+				.map(delivery -> unmarshal(delivery.getBody())) //
+				.doOnNext(body -> log.info("body:{}", body)) //
+				.subscribe();
 
 		// A sample sender
-		// TODO forward headers/add headers
 		log.info("Sending messages...");
-		sender.send(
-				Flux.range(1, messageCount).map(i -> new OutboundMessage(EXCHANGE, "", ("Message_" + i).getBytes())))
+		sender.send(Flux.range(1, 10)
+				.map(i -> buildMessage(Collections.singletonMap("message", "message-value-" + i), EXCHANGE)))
 				.subscribe();
-		latchCompleted.set(latch.await(5, TimeUnit.SECONDS));
+	}
+
+	private OutboundMessage buildMessage(Map<String, Object> payload, String destination) {
+		// create (or forward) headers
+		Map<String, Object> headers = new HashMap<>();
+		headers.put("header1", "header1-value");
+		headers.put("header2", "header2-value");
+
+		// add headers to basic properties
+		AMQP.BasicProperties properties = new AMQP.BasicProperties().builder().headers(headers).build();
+
+		// return new Outbound message
+		return new OutboundMessage(destination, "", properties, marshal(payload));
 	}
 
 	@PreDestroy
 	public void close() throws Exception {
 		// I think this is only here to ensure the connection closes gracefully. But it
 		// does extend closable so it should anyway?
+		// I think you can also just close the sender and receiver objects
 		connectionMono.doOnNext(x -> log.info("Closing connection to rabbit...")).block().close();
+	}
+
+	private byte[] marshal(Map<String, Object> data) {
+		try {
+			return MAPPER.writeValueAsBytes(data);
+		}
+		catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private Map<String, Object> unmarshal(byte[] data) {
+		try {
+			Map<String, Object> body = MAPPER.readValue(data, Map.class);
+			return body;
+		}
+		catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 }
